@@ -29,9 +29,7 @@ def run_sim(model, af_S, af_I, t=(0,10000), init_hosts=400, init_inf=10):
 		S_0[model.G[:,i] == 1] = S_0[model.G[:,i] == 1] * (af_S[i])
 	
 	#Assign infected ICs based on Avr frequency
-	I_0 = np.zeros(3)
-	I_0[0] = af_I
-	I_0[1] = 1 - af_I
+	I_0 = af_I
 
 	X_0 = np.append(S_0 * init_hosts, I_0 * init_inf)
 	sol = solve_ivp(df, t, X_0, method='DOP853')
