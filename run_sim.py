@@ -3,7 +3,7 @@ from scipy.integrate import solve_ivp
 
 from model import Model
 
-def run_sim(model, af_S, af_I, t=(0,10000), init_hosts=400, init_inf=10):
+def run_sim(model, af_S, af_I, t=(0,10000), init_hosts=400, init_inf=10, mut_rate=0.0001):
 
 	def df(t, X):
 		S = X[:model.S_genotypes]
@@ -14,7 +14,7 @@ def run_sim(model, af_S, af_I, t=(0,10000), init_hosts=400, init_inf=10):
 		genotype_freq = S / np.sum(S)
 		pair_freq = np.outer(model.F*genotype_freq, genotype_freq).flatten()
 
-		dS = np.sum(S)*np.dot(pair_freq, model.M) - \
+		dS = np.sum(S)*np.dot(Mut, np.dot(pair_freq, model.M)) - \
 			S*(model.k*N + model.mu + np.dot(model.B, I)/N)
 		dI = I*(np.dot(model.B.T, S)/N - model.mu)
 
@@ -30,6 +30,14 @@ def run_sim(model, af_S, af_I, t=(0,10000), init_hosts=400, init_inf=10):
 	
 	#Assign infected ICs based on Avr frequency
 	I_0 = af_I
+
+	dist = np.zeros((model.S_genotypes, model.S_genotypes))
+	
+	for i, host_1 in enumerate(model.G):
+		for j, host_2 in enumerate(model.G):
+			dist[i, j] = np.linalg.norm(host_1 - host_2, 1)
+
+	Mut = np.power(mut_rate, dist)*np.power(1-mut_rate, model.n_loci-dist)
 
 	X_0 = np.append(S_0 * init_hosts, I_0 * init_inf)
 	sol = solve_ivp(df, t, X_0, method='DOP853')

@@ -1,69 +1,71 @@
 import numpy as np
-import tqdm
-import pickle as pkl
-import multiprocessing as mp
 
 from model import Model
 from run_sim import run_sim
 
-output_path = './data/nocov_gs_costs.p'		#Output filename
-size = 100									#Raster dimension
+from matplotlib import pyplot as plt
 
-var_1 = 'c_g'								#First parameter rastered
-var_2 = 'c_s'								#Second parameter rastered
+n_loci = 10
+n_sims = 100
+n_steps = 100
 
-S_init = [0, 0.5, 0.5]						#Initial host allele frequencies (Recomb, General, Specific)
-I_init = 1									#Avr proportion
+def add_epistasis(model, std):
+	epi_matrix = np.triu(np.ones((n_loci, n_loci)), 1)
+	epi_matrix = epi_matrix * np.random.normal(1, std, (epi_matrix.shape))
 
-t = (0, 10000)								#Simulation time range
+	for i in range(n_loci):
+		for j in range(n_loci):
+			for k, gtp in enumerate(model.G):
+				if gtp[i] == 1 and gtp[j] == 1:
+					if i <= j:
+						model.B[i] = model.B[i] * epi_matrix[i,j] 	
 
-params = {  'k':0.001,						#Coefficient of density dependent growth
-			'mu':0.2,						#Deathrate
-			'b':1,							#Birthrate
-			'beta':0.5,						#Baseline transmission rate
-			'nh':0.1,						#Nonhost transmission rate
-			'g':0.3,						#Strength of general resistance
-			's':0.9,						#Strength of specific resistance
-			'rho':[0.05, 0.0],				#Recombination rate for each allele
-			'c_g':0.1,						#Cost of general resistance
-			'c_s':0.2,						#Cost of specific resistance
-			'v':0.2}						#Cost of virulence      
+cost_grid = np.zeros((n_sims, n_steps))
 
-V_costs = np.linspace(0, 0.3, size)			#Range of parameters for virulence costs
-G_costs = np.linspace(0, 0.2, size)			#Range of parameters for general resistance costs
-S_costs = np.linspace(0, 0.4, size)			#Range of parameters for speific resistance costs
+for i in range(n_sims):
+	cost = np.random.exponential(0.1, n_loci)
+	res = np.random.exponential(0.1, n_loci)
 
-vars = {'c_g': G_costs, 'c_s': S_costs, 'v': V_costs}
+	sim = Model(n_loci, r_type='mult', r_i = res, c_i = cost)
 
-def pass_to_sim(model):
-	return run_sim(model, S_init, I_init, t)
+	res_grid = np.linspace(0, np.max(1-sim.B), n_steps)
 
-if __name__ == '__main__':
-	coords = []     #x, y coordinates of each simulation in raster
-	models = []     #Empty tuple for model classes
+	for j, val in enumerate(res_grid):
+		cost_grid[i,j] = np.min((1-sim.F)[1-sim.B >= val])
 
-	#Create raster of model classes for each parameter combination
-	for i in range(size):
-		for j in range(size):
-			coords.append((i,j))
+cost_avg = np.average(cost_grid, axis=0)
+cost_ste = np.std(cost_grid, axis=0) / np.sqrt(n_sims)
 
-			params[var_1] = vars[var_1][i]
-			params[var_2] = vars[var_2][j]
-			new_model = Model(**params)
+fig, ax = plt.subplots(ncols=2, nrows=2)
 
-			models.append(new_model)
-		
-	#Run simluations for 4 core processor
-	pool = mp.Pool(processes=4)	
-	
-	results = []
-	for result in tqdm.tqdm(pool.imap(pass_to_sim, models), total=len(models)):
-		results.append(result)
+ax[0,0].scatter(1 - sim.B, 1 - sim.F)
 
-	raster = []
-	for i in range(size):
-		inds = [j for j in range(len(coords)) if coords[j][1] == i]
-		raster.append([results[j] for j in inds])
+ax[0,1].plot(res_grid, cost_avg, c='k')
+ax[0,1].fill_between(res_grid, cost_avg-cost_ste, cost_avg+cost_ste)
+ax[0,1].set_xlabel('resistance')
+ax[0,1].set_ylabel('cost')
 
-	with open(output_path, 'wb') as f:
-		pkl.dump([models, results], f)
+cost_grid = np.zeros((n_sims, n_steps))
+
+for i in range(n_sims):
+	cost = np.random.exponential(0.1, n_loci)
+	res = np.random.exponential(0.1, n_loci)
+
+	sim = Model(n_loci, r_type='mult', r_i = res, c_i = cost)
+	add_epistasis(sim, 0.1)
+
+	res_grid = np.linspace(0, np.max(1-sim.B), n_steps)
+
+	for j, val in enumerate(res_grid):
+		cost_grid[i,j] = np.min((1-sim.F)[1-sim.B >= val])
+
+
+cost_avg = np.average(cost_grid, axis=0)
+cost_ste = np.std(cost_grid, axis=0) / np.sqrt(n_sims)
+
+ax[1,0].scatter(1 - sim.B, 1 - sim.F)
+
+ax[1,1].plot(res_grid, cost_avg, c='k')
+ax[1,1].fill_between(res_grid, cost_avg-cost_ste, cost_avg+cost_ste)
+ax[1,1].set_xlabel('resistance')
+ax[1,1].set_ylabel('cost')

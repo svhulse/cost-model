@@ -4,41 +4,47 @@ import numpy as np
 
 class Model:
 
-	def __init__(self, **kwargs):
-		self.n_loci = 3
-		self.I_genotypes = 1
+	def __init__(self, n_loci, r_type='mult', **kwargs):
+		self.n_loci = n_loci
+		self.r_type = r_type
+		
 		self.S_genotypes = 2**self.n_loci
-
 		self.G = np.array(list(itertools.product([0, 1], repeat=self.n_loci)))
 
-		self.rho = np.ones(self.n_loci - 1) * 0.5
+		self.r_i = np.zeros(self.n_loci)
+		self.c_i = np.zeros(self.n_loci)
+
+		self.I_genotypes = 1
 
 		self.b = 1
 		self.mu = 0.2
 		self.k = 0.001
 
-		self.beta = 0.5
-		
-		self.r_i = np.zeros(self.n_loci)
-		self.c_i = np.zeros(self.n_loci)
+		self.beta = 1
 
 		for key, value in kwargs.items():
 			setattr(self, key, value)
 
+		self.rho = np.ones(self.n_loci - 1) * 0.5
+
 		self.F = 1 - np.dot(self.G, self.c_i)
 		self.B = self.transmission_matrix()
-		self.M = self.mating_matrix()
+		#self.M = self.mating_matrix()
 
 	def transmission_matrix(self):
-		B = np.ones((self.S_genotypes, self.I_genotypes)) * self.beta
+		if self.r_type == 'mult':
+			B = np.ones(self.S_genotypes) * self.beta
 
-		for i, host in enumerate(self.G):
-			for j in range(self.n_loci):
-				if host[j] == 1:
-					B[i,:] = B[i,:] * (1 - self.r_i[j])
+			for i, host in enumerate(self.G):
+				for j in range(self.n_loci):
+					if host[j] == 1:
+						B[i] = B[i] * (1 - self.r_i[j])
 
+		elif self.r_type == 'add':
+			B = (1 - np.dot(self.G, self.r_i)) * self.beta
+		
 		return B
-				
+			
 	def mating_matrix(self):
 		paths = np.array(list(itertools.product([0, 1], repeat=self.n_loci)))
 		p_paths = np.zeros(self.S_genotypes)
