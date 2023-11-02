@@ -4,22 +4,22 @@ import numpy as np
 
 class Model:
 
-	def __init__(self, n_loci, r_type='mult', **kwargs):
+	def __init__(self, n_loci, r_locus, c_locus, r_type='mult', **kwargs):
 		self.n_loci = n_loci
 		self.r_type = r_type
 		
 		self.S_genotypes = 2**self.n_loci
 		self.G = np.array(list(itertools.product([0, 1], repeat=self.n_loci)))
 
-		self.r_i = np.zeros(self.n_loci)
-		self.c_i = np.zeros(self.n_loci)
+		self.r_i = r_locus
+		self.c_i = c_locus
 
 		self.I_genotypes = 1
 
 		self.b = 1
 		self.mu = 0.2
 		self.k = 0.001
-
+		self.mut = 0.00001
 		self.beta = 1
 
 		for key, value in kwargs.items():
@@ -27,7 +27,7 @@ class Model:
 
 		self.rho = np.ones(self.n_loci - 1) * 0.5
 
-		self.F = 1 - np.dot(self.G, self.c_i)
+		self.F = self.b - np.dot(self.G, self.c_i)
 		self.B = self.transmission_matrix()
 		#self.M = self.mating_matrix()
 
@@ -44,7 +44,17 @@ class Model:
 			B = (1 - np.dot(self.G, self.r_i)) * self.beta
 		
 		return B
-			
+
+	def mutation_matrix(self):
+		dist_matrix = np.zeros((self.S_genotypes, self.S_genotypes))
+
+		for i in self.S_genotypes:
+			for j in self.S_genotypes:
+				dist_matrix[i,j] = np.sum(np.abs(self.G[i,:] - self.G[j,:]))
+		
+		M = np.power(self.mut, dist_matrix)*np.power(1 - self.mut, self.n_loci - dist_matrix)
+		return M
+
 	def mating_matrix(self):
 		paths = np.array(list(itertools.product([0, 1], repeat=self.n_loci)))
 		p_paths = np.zeros(self.S_genotypes)
