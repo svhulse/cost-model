@@ -3,6 +3,7 @@ from itertools import combinations, chain
 
 import random
 import numpy as np
+from scipy.integrate import solve_ivp
 
 class PModel:
 
@@ -73,6 +74,43 @@ class PModel:
 
 		self.B = self.transmission_matrix()
 		self.F = self.b - np.dot(self.G, self.c_i)
+	
+	def run_sim(self, t=(0, 1000), n_gens=50):
+		#Assign ICs based on allele frequencies
+		S_0 = np.zeros(self.S_genotypes)
+
+		S_0[0] = 50		
+		I_0 = 1
+		X_0 = np.append(S_0, I_0)
+		
+		X_t = np.zeros((self.S_genotypes, n_gens))
+		I_t = np.zeros(n_gens)
+		
+		def df(t, X):
+			S = X[:self.S_genotypes]
+			I = X[self.S_genotypes:]
+
+			N = np.sum(S) + np.sum(I)
+	
+			dS = S*(self.F - self.k*N - self.mu - self.B*I)
+			dI = I*(np.dot(self.B.T, S) - self.mu)
+
+			X_out = np.append(dS, dI)
+
+			return X_out
+
+		#Burn in ecological dynamics before mutation
+		X_0 = solve_ivp(df, (0, 100), X_0).y[:,-1]
+
+		for i in range(n_gens):
+			sol = solve_ivp(df, t, X_0)
+			
+			X_t[:, i] = sol.y[:self.S_genotypes, -1]
+			I_t[i] = sol.y[self.S_genotypes:, -1]
+
+			X_0 = np.append(np.dot(self.M, sol.y[:self.S_genotypes,-1]), sol.y[self.S_genotypes:, -1])
+
+		return X_t, I_t
 
 class ADModel:
 	'''
