@@ -1,12 +1,13 @@
 import itertools
+from itertools import combinations, chain
 
+import random
 import numpy as np
 
-class Model:
+class PModel:
 
-	def __init__(self, n_loci, r_locus, c_locus, r_type='mult', **kwargs):
+	def __init__(self, n_loci, r_locus, c_locus, **kwargs):
 		self.n_loci = n_loci
-		self.r_type = r_type
 		
 		self.S_genotypes = 2**self.n_loci
 		self.G = np.array(list(itertools.product([0, 1], repeat=self.n_loci)))
@@ -14,73 +15,138 @@ class Model:
 		self.r_i = r_locus
 		self.c_i = c_locus
 
-		self.I_genotypes = 1
-
 		self.b = 1
 		self.mu = 0.2
 		self.k = 0.001
 		self.mut = 0.00001
-		self.beta = 1
+		self.beta = 0.01
 
 		for key, value in kwargs.items():
 			setattr(self, key, value)
 
-		self.rho = np.ones(self.n_loci - 1) * 0.5
-
 		self.F = self.b - np.dot(self.G, self.c_i)
 		self.B = self.transmission_matrix()
-		#self.M = self.mating_matrix()
+		self.M = self.mutation_matrix()
 
 	def transmission_matrix(self):
-		if self.r_type == 'mult':
-			B = np.ones(self.S_genotypes) * self.beta
-
-			for i, host in enumerate(self.G):
-				for j in range(self.n_loci):
-					if host[j] == 1:
-						B[i] = B[i] * (1 - self.r_i[j])
-
-		elif self.r_type == 'add':
-			B = (1 - np.dot(self.G, self.r_i)) * self.beta
+		B = (1 - np.dot(self.G, self.r_i))
 		
 		return B
-
+	
 	def mutation_matrix(self):
 		dist_matrix = np.zeros((self.S_genotypes, self.S_genotypes))
 
-		for i in self.S_genotypes:
-			for j in self.S_genotypes:
+		for i in range(self.S_genotypes):
+			for j in range(self.S_genotypes):
 				dist_matrix[i,j] = np.sum(np.abs(self.G[i,:] - self.G[j,:]))
 		
-		M = np.power(self.mut, dist_matrix)*np.power(1 - self.mut, self.n_loci - dist_matrix)
+		M = np.zeros(dist_matrix.shape)
+		M[dist_matrix == 1] = self.mut
+		M[dist_matrix == 0] = 1 - self.mut*self.S_genotypes
+
 		return M
 
-	def mating_matrix(self):
-		paths = np.array(list(itertools.product([0, 1], repeat=self.n_loci)))
-		p_paths = np.zeros(self.S_genotypes)
+	def add_epistasis(self, order, p, sigma):
+		pairs = np.array(list(combinations(range(self.n_loci), order)))
+		sample = pairs[np.where(np.random.binomial(1, p, len(pairs)) == 1)]
 
-		for i, path in enumerate(paths):
-			p_locus = np.zeros(self.n_loci)
-			p_locus[0] = 0.5
+		r_effects = np.random.normal(1, sigma, len(sample))
+		#c_effects = np.random.normal(1, sigma, len(sample))
 
-			for j in range(self.n_loci - 1):
-				if path[j] == path[j+1]:
-					p_locus[j+1] = 1 - self.rho if np.isscalar(self.rho) else 1 - self.rho[j]
-				else:
-					p_locus[j+1] = self.rho if np.isscalar(self.rho) else self.rho[j]
-			
-			p_paths[i] = np.product(p_locus)
+		for i, ind in enumerate(sample):
+			ind = list(ind)
+			for gtp_ind, gtp in enumerate(self.G):
+				if np.all(gtp[ind] == 1):
+					self.B[gtp_ind] += np.sum(self.r_i[ind])
+					self.B[gtp_ind] -= r_effects[i]*(np.sum(self.r_i[ind]))
 
-		M = np.zeros((self.S_genotypes, self.S_genotypes, self.S_genotypes))
-		for i, parental in enumerate(self.G):
-			for j, maternal in enumerate(self.G):
-				offspring = np.zeros(paths.shape)
-				offspring[paths==0] = np.tile(parental, (self.S_genotypes, 1))[paths==0]
-				offspring[paths==1] = np.tile(maternal, (self.S_genotypes, 1))[paths==1]
-				
-				for k, progeny in enumerate(self.G):
-					matches = np.product(offspring == progeny, axis=1, dtype=bool)
-					M[i,j,k]= np.dot(matches, p_paths)
+	def normalize(self, b_min=0.2):
+		self.F = self.F - np.min(self.F) + b_min*np.max(self.F)
+		self.F = self.F / np.max(self.F)
+
+		self.B = self.B - np.min(self.B)
+		self.B = self.B / np.max(self.B)
+
+	def update_loci(self, r_locus, c_locus):
+		self.r_i = r_locus
+		self.c_i = c_locus
+
+		self.B = self.transmission_matrix()
+		self.F = self.b - np.dot(self.G, self.c_i)
+
+class ADModel:
+	'''
+	The Model class is used to define a simulation for the QR host-pathogen
+	model. It allows for both density-dependent and frequency-dependent disease
+	transmission. Parameters can also be changed between multiple runs by 
+	using kwargs in the run_sim method.
+	'''
+
+	def __init__(self, **kwargs):
+		self.N_alleles = 100 #number of alleles
+		self.N_iter = 50 #number of evolutionary time steps
+		mut = 0.05 #mutation rate
+
+		#Define the mutation matrix
+		self._M = np.diag(np.full(self.N_alleles, 1 - mut))
+		self._M = self._M + np.diag(np.ones(self.N_alleles - 1)*mut/2, 1)
+		self._M = self._M + np.diag(np.ones(self.N_alleles - 1)*mut/2, -1)
+		self._M[0,1] = mut
+		self._M[self.N_alleles - 1, self.N_alleles - 2] = mut
+
+		#Set parameters and resistance-cost curve
+		self.res = np.linspace(0, 1, self.N_alleles)
+		self.b = 0.5 + self.res**0.5
+
+		#Set default parameters
+		self.mu = 0.2
+		self.gamma = 0.001
+		self.beta = 0.005
+
+		#Get kwargs from model initialization and modify parameter values, if
+		#h is changed, then _t and N_t must also be changed to compensate
+		for key, value in kwargs.items():
+			setattr(self, key, value)
 		
-		M = M.reshape((self.S_genotypes**2, self.S_genotypes))
-		return M
+	def df(self, t, X):
+		S = X[:self.N_alleles] 
+		I = X[-1]
+
+		N = np.sum(S) + I
+		dS = S*(self.b - self.mu - self.gamma*N - self.res*I)
+		dI = I*(np.dot(self.res, S) - self.mu)
+		
+		X_out = np.append(dS, dI)
+
+		return X_out
+
+	#Run simulation
+	def run_sim(self):
+		#Set initial conditions
+		S_0 = np.zeros(self.N_alleles)
+		I_0 = 10
+		S_0[49] = 100
+		X_0 = np.append(S_0, I_0)
+
+		S_eq = np.zeros((self.N_alleles, self.N_iter))
+		I_eq = np.zeros(self.N_iter)
+
+		t = (0, 10000)
+		zero_threshold = 0.01 #Threshold to set abundance values to zero
+
+		for i in range(self.N_iter):
+			sol = solve_ivp(self.df, t, X_0)
+			
+			S_eq[:, i] = sol.y[:self.N_alleles, -1]
+			I_eq[i] = sol.y[-1, -1]
+
+			#Set any population below threshold to 0
+			for j in range(self.N_alleles):
+				if S_eq[j, i] < zero_threshold:
+					S_eq[j, i] = 0
+
+			#Assign the values at the end of the ecological simulation to the 
+			#first value so the simulation can be re-run
+			X_0 = np.append(np.dot(self._M, S_eq[:, i]), I_eq[i])
+
+		return (S_eq, I_eq)
