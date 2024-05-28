@@ -20,7 +20,7 @@ class PModel:
 		self.mu = 0.2
 		self.k = 0.001
 		self.mut = 0.00001
-		self.beta = 0.01
+		self.beta = 0.005
 
 		for key, value in kwargs.items():
 			setattr(self, key, value)
@@ -61,12 +61,17 @@ class PModel:
 					self.B[gtp_ind] += np.sum(self.r_i[ind])
 					self.B[gtp_ind] -= r_effects[i]*(np.sum(self.r_i[ind]))
 
-	def normalize(self, b_min=0.2):
+	def normalize(self, b_min=0.2, b_max=1):
 		self.F = self.F - np.min(self.F) + b_min*np.max(self.F)
 		self.F = self.F / np.max(self.F)
 
+		self.F = self.F * b_max
+
 		self.B = self.B - np.min(self.B)
 		self.B = self.B / np.max(self.B)
+
+		self.B = self.B * self.beta
+
 
 	def update_loci(self, r_locus, c_locus):
 		self.r_i = r_locus
