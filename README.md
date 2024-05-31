@@ -18,3 +18,5 @@ The models themselves and the basic tools for them are containd in the `model.py
 `adaptive_dynamics.ipynb` is used to first run an evolutionary model in the same was as `evol_model.ipynb`, but then use the resulting Pareto front as the basis of a trade-off function which is then fed into an adaptive dynamics model. It was used to genete Supplemental Figure 1.
 
 `alt_loci_numbers` is used to make trade-off plots like in Figure 2, but with varying numbers of loci. It was used to generate Supplemental Figure 2.
+
+Note that the time it takes to run a simulation can be greatly reduced by increasing the max_step parameter in the run_sim() function within PModel, but this will occationally result in numerical instability.

@@ -6,6 +6,11 @@ import numpy as np
 from scipy.integrate import solve_ivp
 
 class PModel:
+	'''
+	The PModel class is used to define a discrete random loci model. All
+	basic parameters for the model are contained here, as well as functions
+	used to run a dynamical simulation with the model.
+	'''
 
 	def __init__(self, n_loci, r_locus, c_locus, **kwargs):
 		self.n_loci = n_loci
@@ -16,41 +21,46 @@ class PModel:
 		self.r_i = r_locus
 		self.c_i = c_locus
 
-		self.b = 1
-		self.mu = 0.2
-		self.k = 0.001
-		self.mut = 0.00001
-		self.beta = 0.005
+		self.b = 1				#Baseline birth rate
+		self.mu = 0.2			#Death rate
+		self.k = 0.001			#Coefficient of density-dependent growth
+		self.mut = 0.00001		#Mutation rate
+		self.beta = 0.005		#Baseline transmission rate
 
 		for key, value in kwargs.items():
 			setattr(self, key, value)
 
-		self.F = self.b - np.dot(self.G, self.c_i)
-		self.B = self.transmission_matrix()
-		self.M = self.mutation_matrix()
+		self.F = self.b - np.dot(self.G, self.c_i)	#Initialize fecundity vector based on genotype costs
+		self.B = self.transmission_matrix()			#Initialize transmission rate vector
+		self.M = self.mutation_matrix()				#Initialize mutation matrix
 
 	def transmission_matrix(self):
+		#Calculate the transmission rate of each genotype by summing loci effects
 		B = (1 - np.dot(self.G, self.r_i))
 		
 		return B
 	
 	def mutation_matrix(self):
+		#Compute a matrix for how many alleles each genotype pair differs by
 		dist_matrix = np.zeros((self.S_genotypes, self.S_genotypes))
 
 		for i in range(self.S_genotypes):
 			for j in range(self.S_genotypes):
 				dist_matrix[i,j] = np.sum(np.abs(self.G[i,:] - self.G[j,:]))
 		
+		#For genotypes that differ by a single mutation, set the mutation proability to the mutation rate
 		M = np.zeros(dist_matrix.shape)
 		M[dist_matrix == 1] = self.mut
-		M[dist_matrix == 0] = 1 - self.mut*self.S_genotypes
+		M[dist_matrix == 0] = 1 - self.mut*self.n_loci
 
 		return M
 
 	def add_epistasis(self, order, p, sigma):
+		#Generate a list of all loci combinations of length order and take a random sample from that list
 		pairs = np.array(list(combinations(range(self.n_loci), order)))
 		sample = pairs[np.where(np.random.binomial(1, p, len(pairs)) == 1)]
 
+		#Sample epistatic effects
 		r_effects = np.random.normal(1, sigma, len(sample))
 		#c_effects = np.random.normal(1, sigma, len(sample))
 
@@ -61,6 +71,7 @@ class PModel:
 					self.B[gtp_ind] += np.sum(self.r_i[ind])
 					self.B[gtp_ind] -= r_effects[i]*(np.sum(self.r_i[ind]))
 
+	#Normalize the birthrates and transmission rates
 	def normalize(self, b_min=0.2, b_max=1):
 		self.F = self.F - np.min(self.F) + b_min*np.max(self.F)
 		self.F = self.F / np.max(self.F)
@@ -73,6 +84,7 @@ class PModel:
 		self.B = self.B * self.beta
 
 
+	#Change the costs and benefits of each active allele
 	def update_loci(self, r_locus, c_locus):
 		self.r_i = r_locus
 		self.c_i = c_locus
@@ -80,20 +92,20 @@ class PModel:
 		self.B = self.transmission_matrix()
 		self.F = self.b - np.dot(self.G, self.c_i)
 	
-	def run_sim(self, t=(0, 1000), n_gens=50):
-		#Assign ICs based on allele frequencies
+	def run_sim(self, t=(0, 1000), n_gens=50, max_step=1):
+		#Define initial conditions
 		S_0 = np.zeros(self.S_genotypes)
-
-		S_0[0] = 50		
-		I_0 = 1
+		S_0[0] = 100
+		I_0 = 10
 		X_0 = np.append(S_0, I_0)
 		
-		X_t = np.zeros((self.S_genotypes, n_gens))
-		I_t = np.zeros(n_gens)
+		X_t = np.zeros((self.S_genotypes, n_gens))	#Equilibrium host abundances
+		I_t = np.zeros(n_gens)						#Equilibrium infected host abundances
 		
+		#Define the dynamical system	
 		def df(t, X):
 			S = X[:self.S_genotypes]
-			I = X[self.S_genotypes:]
+			I = X[-1]
 
 			N = np.sum(S) + np.sum(I)
 	
@@ -105,24 +117,25 @@ class PModel:
 			return X_out
 
 		#Burn in ecological dynamics before mutation
-		X_0 = solve_ivp(df, (0, 100), X_0).y[:,-1]
+		X_0 = solve_ivp(df, (0, 100), X_0, max_step=max_step).y[:,-1]
 
+		#Iteratively solve equations and introduce mutations
 		for i in range(n_gens):
-			sol = solve_ivp(df, t, X_0)
+			sol = solve_ivp(df, t, X_0, max_step=max_step)
 			
 			X_t[:, i] = sol.y[:self.S_genotypes, -1]
-			I_t[i] = sol.y[self.S_genotypes:, -1]
+			I_t[i] = sol.y[-1, -1]
 
-			X_0 = np.append(np.dot(self.M, sol.y[:self.S_genotypes,-1]), sol.y[self.S_genotypes:, -1])
+			X_0 = np.append(np.dot(self.M, sol.y[:self.S_genotypes,-1]), sol.y[-1, -1])
 
 		return X_t, I_t
 
 class ADModel:
 	'''
-	The Model class is used to define a simulation for the QR host-pathogen
-	model. It allows for both density-dependent and frequency-dependent disease
-	transmission. Parameters can also be changed between multiple runs by 
-	using kwargs in the run_sim method.
+	The ADModel class is used to define an adaptive dynamics simulation
+	based on the same system of equations in the discrete random loci
+	model. We use a numerical adaptive dynamics approach, where the
+	cost function can be defined by defining the b and res vectors.
 	'''
 
 	def __init__(self, **kwargs):
@@ -137,26 +150,25 @@ class ADModel:
 		self._M[0,1] = mut
 		self._M[self.N_alleles - 1, self.N_alleles - 2] = mut
 
-		#Set parameters and resistance-cost curve
+		#Set default parameters and resistance-cost curve
 		self.res = np.linspace(0, 1, self.N_alleles)
 		self.b = 0.5 + self.res**0.5
 
 		#Set default parameters
-		self.mu = 0.2
-		self.gamma = 0.001
-		self.beta = 0.005
+		self.mu = 0.2		#Death rate
+		self.k = 0.001		#Coefficient of density-dependent growth
+		self.beta = 0.005	#Baseline transmission rate
 
-		#Get kwargs from model initialization and modify parameter values, if
-		#h is changed, then _t and N_t must also be changed to compensate
 		for key, value in kwargs.items():
 			setattr(self, key, value)
-		
+
+	#Define the dynamical system	
 	def df(self, t, X):
 		S = X[:self.N_alleles] 
 		I = X[-1]
 
 		N = np.sum(S) + I
-		dS = S*(self.b - self.mu - self.gamma*N - self.res*I)
+		dS = S*(self.b - self.mu - self.k*N - self.res*I)
 		dI = I*(np.dot(self.res, S) - self.mu)
 		
 		X_out = np.append(dS, dI)
@@ -165,7 +177,7 @@ class ADModel:
 
 	#Run simulation
 	def run_sim(self):
-		#Set initial conditions
+		#Define initial conditions
 		S_0 = np.zeros(self.N_alleles)
 		I_0 = 10
 		S_0[49] = 100
