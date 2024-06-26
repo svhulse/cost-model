@@ -130,6 +130,26 @@ class PModel:
 
 		return X_t, I_t
 
+	#Return the transmission and fecundity values for genotypes on the pareto front
+	def pareto(self):
+		pareto_res = []
+		pareto_fec = []
+
+		for i in range(len(self.B)):
+			candidates = np.where(self.B <= self.B[i])
+
+			if not np.any(self.F[candidates] > self.F[i]):
+				pareto_res.append(self.B[i])
+				pareto_fec.append(self.F[i])
+		
+		pareto_res = np.array(pareto_res)
+		pareto_fec = np.array(pareto_fec)
+
+		pareto_fec = pareto_fec[pareto_res.argsort()]
+		pareto_res = np.sort(pareto_res)
+
+		return pareto_res, pareto_fec
+
 class ADModel:
 	'''
 	The ADModel class is used to define an adaptive dynamics simulation
