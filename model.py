@@ -55,13 +55,13 @@ class PModel:
 
 		return M
 
-	def add_epistasis(self, order, p, sigma):
+	def add_epistasis(self, order, p, sigma, mu=1):
 		#Generate a list of all loci combinations of length order and take a random sample from that list
 		pairs = np.array(list(combinations(range(self.n_loci), order)))
 		sample = pairs[np.where(np.random.binomial(1, p, len(pairs)) == 1)]
 
 		#Sample epistatic effects
-		r_effects = np.random.normal(1, sigma, len(sample))
+		r_effects = np.random.normal(mu, sigma, len(sample))
 		#c_effects = np.random.normal(1, sigma, len(sample))
 
 		for i, ind in enumerate(sample):
