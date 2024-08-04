@@ -73,8 +73,9 @@ class PModel:
 
 	#Normalize the birthrates and transmission rates
 	def normalize(self, b_min=0.2, b_max=1):
-		self.F = self.F - np.min(self.F) + b_min*np.max(self.F)
-		self.F = self.F / np.max(self.F)
+		self.F = (self.F - np.min(self.F)) / (np.max(self.F) - np.min(self.F))
+		self.F *= (b_max - b_min)
+		self.F += b_min
 
 		self.F = self.F * b_max
 
