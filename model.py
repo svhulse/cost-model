@@ -226,3 +226,51 @@ class ADModel:
 			X_0 = np.append(np.dot(self._M, S_eq[:, i]), I_eq[i])
 
 		return (S_eq, I_eq)
+	
+def PIP(model, interp=False, interp_dim=100):
+	#Compute equilibrium susceptible prevalence
+	def S_star(beta, mu=0.2):
+		return mu / beta
+
+	#Calculate equilibrium infected prevalence 
+	def I_star(beta, b, mu=0.2, k=0.001):
+		return (beta*(b - mu) - k*mu) / (beta*(k + beta))
+
+	#Calculate pairwise invasion fitness
+	def invasion_fitness(b_res, beta_res, b_mut, beta_mut, mu=0.2, k=0.001):
+		return b_mut - mu - k*(S_star(beta_res) + I_star(beta_res, b_res)) - beta_mut*I_star(beta_res, b_res)
+	
+	#Retrieve pareto genotypes and remove genotype with zero transmission
+
+	res_pts, fec_pts = model.pareto()
+
+	fec_pts = fec_pts[res_pts > 0]
+	res_pts = res_pts[res_pts > 0]
+
+	if not interp:
+		res = res_pts
+		fec = fec_pts
+
+	else:
+		res = np.linspace(np.min(res_pts), np.max(res_pts), interp_dim)
+		
+		fec_interp = np.interp(res, res_pts, fec_pts)
+		coefs = np.polyfit(res, fec_interp, 5)
+
+		fec = np.poly1d(coefs)(res)
+
+	PIP = np.zeros((len(res), len(res)))
+
+
+	#Go through all genotype pairs and compute invasion fitness
+	for i in range(PIP.shape[0]):
+		for j in range(PIP.shape[1]):
+			diff = invasion_fitness(fec[i], res[i], fec[j], res[j])
+
+			if i == j:
+				pass
+
+			elif diff > 0:
+				PIP[i, j] = 1
+
+	return PIP
