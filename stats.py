@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 
-from model import PModel
+from multiprocessing import Pool
+
+from model import PModel, PIP
 
 def shannon_div(X_t):
 	eq_prop = X_t[:,-1] / np.sum(X_t[:,-1])
@@ -21,7 +23,7 @@ def nucleotide_div(model, X_t):
 			
 	return div
 		
-def diversity_panel(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=0.3, n_loci=9, n_gens=15, t=(0,1000), beta=0.005):
+def batch(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=0.3, n_loci=9, n_gens=15, t=(0,1000), beta=0.005):
 	#Initialize model
 	model = PModel(n_loci, np.zeros(n_loci), np.zeros(n_loci), beta=beta)
 	
@@ -30,7 +32,9 @@ def diversity_panel(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=
 		 'Polymorphism': [], 
 		 'Shannon Diversity': [], 
 		 'Nucleotide Diversity': [], 
-		 'Slope': []}
+		 'Slope': [],
+		 'Invasion Genotypes: Pareto': [],
+		 'Invasion Genotypes: Interp': []}
 
 	threshold = 5
 
@@ -49,14 +53,24 @@ def diversity_panel(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=
 			model.add_epistasis(3, p2, sigma2)
 
 		model.normalize()
-
+		
+		data['Invasion Genotypes: Pareto'].append(np.min(np.sum(PIP(model), axis=1)))
+		data['Invasion Genotypes: Interp'].append(np.min(np.sum(PIP(model, interp=True, interp_dim=1000), axis=1)))
 		data['Loci'].append(n_loci)
 		data['Epistasis'].append(epistasis)
 
 		#Run dynamical simulation
 		X_t, _ = model.run_sim(t, n_gens)
+		res_norm, fec_norm = model.pareto()
 
-		data['Slopes'].append(np.polyfit(1 - model.B, 1 - model.F, 2)[0])
+		res_norm = res_norm - np.min(res_norm)
+		res_norm = res_norm / np.max(res_norm)
+		fec_norm = fec_norm - np.min(fec_norm)
+		fec_norm = fec_norm / np.max(fec_norm)
+
+		data['Shannon Diversity'].append(shannon_div(X_t))
+		data['Nucleotide Diversity'].append(nucleotide_div(model, X_t))
+		data['Slope'].append(np.polyfit(1 - res_norm, 1 - fec_norm, 2)[0])
 
 		#Check for polymorphism and update counters
 		if np.sum(X_t[:, -1] > threshold) > 1:
@@ -68,3 +82,6 @@ def diversity_panel(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=
 	df.to_csv(name + '.csv', index=False)  
 	
 	return df
+
+if __name__ == '__main__':
+	batch('epistasis_0', 1000, 0)
