@@ -1,7 +1,6 @@
 import itertools
-from itertools import combinations, chain
+from itertools import combinations
 
-import random
 import numpy as np
 from scipy.integrate import solve_ivp
 
@@ -133,23 +132,39 @@ class PModel:
 
 	#Return the transmission and fecundity values for genotypes on the pareto front
 	def pareto(self):
-		pareto_res = []
-		pareto_fec = []
+		res_pareto = []
+		fec_pareto = []
 
 		for i in range(len(self.B)):
 			candidates = np.where(self.B <= self.B[i])
 
 			if not np.any(self.F[candidates] > self.F[i]):
-				pareto_res.append(self.B[i])
-				pareto_fec.append(self.F[i])
+				res_pareto.append(self.B[i])
+				fec_pareto.append(self.F[i])
 		
-		pareto_res = np.array(pareto_res)
-		pareto_fec = np.array(pareto_fec)
+		res_pareto = np.array(res_pareto)
+		fec_pareto = np.array(fec_pareto)
 
-		pareto_fec = pareto_fec[pareto_res.argsort()]
-		pareto_res = np.sort(pareto_res)
+		fec_pareto = fec_pareto[res_pareto.argsort()]
+		res_pareto = np.sort(res_pareto)
 
-		return pareto_res, pareto_fec
+		return res_pareto, fec_pareto
+
+	#Return a polynomial approximation of the Pareto front
+	def poly_approx(self, order=3, points=1000):
+		res, fec = self.pareto()
+		
+		#Remove genotype with zero transmission to prevent division by zero
+		fec = fec[res > 0]
+		res = res[res > 0]
+
+		res_interp = np.linspace(np.min(res), np.max(res), points) 
+		fec_pli = np.interp(res_interp, res, fec)
+
+		coefs = np.polyfit(res_interp, fec_pli, order)
+		fec_interp = np.poly1d(coefs)(res_interp)
+
+		return res_interp, fec_interp, coefs
 
 class ADModel:
 	'''
@@ -227,7 +242,7 @@ class ADModel:
 
 		return (S_eq, I_eq)
 	
-def PIP(model, interp=False, interp_dim=100):
+def PIP(model, interp=False, order=4, points=100):
 	#Compute equilibrium susceptible prevalence
 	def S_star(beta, mu=0.2):
 		return mu / beta
@@ -241,26 +256,16 @@ def PIP(model, interp=False, interp_dim=100):
 		return b_mut - mu - k*(S_star(beta_res) + I_star(beta_res, b_res)) - beta_mut*I_star(beta_res, b_res)
 	
 	#Retrieve pareto genotypes and remove genotype with zero transmission
-
-	res_pts, fec_pts = model.pareto()
-
-	fec_pts = fec_pts[res_pts > 0]
-	res_pts = res_pts[res_pts > 0]
-
 	if not interp:
-		res = res_pts
-		fec = fec_pts
+		res, fec = model.pareto()
+
+		fec = fec[res > 0]
+		res = res[res > 0]
 
 	else:
-		res = np.linspace(np.min(res_pts), np.max(res_pts), interp_dim)
-		
-		fec_interp = np.interp(res, res_pts, fec_pts)
-		coefs = np.polyfit(res, fec_interp, 5)
-
-		fec = np.poly1d(coefs)(res)
+		res, fec, _ = model.poly_approx(order=order, points=points)
 
 	PIP = np.zeros((len(res), len(res)))
-
 
 	#Go through all genotype pairs and compute invasion fitness
 	for i in range(PIP.shape[0]):
@@ -268,7 +273,7 @@ def PIP(model, interp=False, interp_dim=100):
 			diff = invasion_fitness(fec[i], res[i], fec[j], res[j])
 
 			if i == j:
-				pass
+				continue
 
 			elif diff > 0:
 				PIP[i, j] = 1

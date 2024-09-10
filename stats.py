@@ -12,7 +12,6 @@ def shannon_div(X_t):
 	return div
 
 def nucleotide_div(model, X_t):
-	#Compute nucleotide diversity
 	div = 0
 	sum = np.sum(X_t[:, -1])
 	
@@ -22,7 +21,13 @@ def nucleotide_div(model, X_t):
 			div += (X_t[j, -1]*X_t[k, -1]*pi) / sum**2
 			
 	return div
-		
+
+def get_slope(model, points=1000):
+	res, fec = model.pareto()
+	slope = np.polyfit(res, 1-fec, 2)[0]
+
+	return slope
+
 def batch(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=0.3, n_loci=9, n_gens=15, t=(0,1000), beta=0.005):
 	#Initialize model
 	model = PModel(n_loci, np.zeros(n_loci), np.zeros(n_loci), beta=beta)
@@ -55,22 +60,17 @@ def batch(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=0.3, n_loc
 		model.normalize()
 		
 		data['Invasion Genotypes: Pareto'].append(np.min(np.sum(PIP(model), axis=1)))
-		data['Invasion Genotypes: Interp'].append(np.min(np.sum(PIP(model, interp=True, interp_dim=1000), axis=1)))
+		data['Invasion Genotypes: Interp'].append(np.min(np.sum(PIP(model, interp=True, order=3, points=1000), axis=1)))
 		data['Loci'].append(n_loci)
 		data['Epistasis'].append(epistasis)
 
 		#Run dynamical simulation
 		X_t, _ = model.run_sim(t, n_gens)
-		res_norm, fec_norm = model.pareto()
-
-		res_norm = res_norm - np.min(res_norm)
-		res_norm = res_norm / np.max(res_norm)
-		fec_norm = fec_norm - np.min(fec_norm)
-		fec_norm = fec_norm / np.max(fec_norm)
 
 		data['Shannon Diversity'].append(shannon_div(X_t))
 		data['Nucleotide Diversity'].append(nucleotide_div(model, X_t))
-		data['Slope'].append(np.polyfit(1 - res_norm, 1 - fec_norm, 2)[0])
+
+		data['Slope'].append(get_slope(model))
 
 		#Check for polymorphism and update counters
 		if np.sum(X_t[:, -1] > threshold) > 1:
@@ -79,9 +79,9 @@ def batch(name, n_sims, epistasis, p1=0.3, p2=0.3, sigma1=0.3, sigma2=0.3, n_loc
 			data['Polymorphism'].append(False)
 
 	df = pd.DataFrame(data)
-	df.to_csv(name + '.csv', index=False)  
+	df.to_csv(name + '.csv', index=False, mode='w')  
 	
 	return df
 
 if __name__ == '__main__':
-	batch('epistasis_0', 1000, 0)
+	batch('epistasis_2', 1000, 2)
