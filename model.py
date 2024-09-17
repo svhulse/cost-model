@@ -83,7 +83,6 @@ class PModel:
 
 		self.B = self.B * self.beta
 
-
 	#Change the costs and benefits of each active allele
 	def update_loci(self, r_locus, c_locus):
 		self.r_i = r_locus
@@ -92,7 +91,7 @@ class PModel:
 		self.B = self.transmission_matrix()
 		self.F = self.b - np.dot(self.G, self.c_i)
 	
-	def run_sim(self, t=(0, 1000), n_gens=50, max_step=1):
+	def run_sim(self, t=(0, 1000), n_gens=50, max_step=0.5):
 		#Define initial conditions
 		S_0 = np.zeros(self.S_genotypes)
 		S_0[0] = 100
@@ -153,10 +152,6 @@ class PModel:
 	#Return a polynomial approximation of the Pareto front
 	def poly_approx(self, order=3, points=1000):
 		res, fec = self.pareto()
-		
-		#Remove genotype with zero transmission to prevent division by zero
-		fec = fec[res > 0]
-		res = res[res > 0]
 
 		res_interp = np.linspace(np.min(res), np.max(res), points) 
 		fec_pli = np.interp(res_interp, res, fec)
@@ -165,6 +160,26 @@ class PModel:
 		fec_interp = np.poly1d(coefs)(res_interp)
 
 		return res_interp, fec_interp, coefs
+	
+	'''
+	def spline_approx(self, points=1000):
+		res, fec = self.pareto()
+		cs = CubicSpline(res, fec)
+
+		res_interp = np.linspace(np.min(res), np.max(res), points)
+		fec_interp = cs(res_interp) 
+
+		return res_interp, fec_interp
+	'''
+		
+	#Return a polynomial approximation of the Pareto front
+	def linear_approx(self, points=1000):
+		res, fec = self.pareto()
+
+		res_interp = np.linspace(np.min(res), np.max(res), points) 
+		fec_interp = np.interp(res_interp, res, fec)
+
+		return res_interp, fec_interp
 
 class ADModel:
 	'''
@@ -241,8 +256,13 @@ class ADModel:
 			X_0 = np.append(np.dot(self._M, S_eq[:, i]), I_eq[i])
 
 		return (S_eq, I_eq)
-	
-def PIP(model, interp=False, order=4, points=100):
+
+def PIP(res, fec):
+	#Remove genotypes with zero transmission to prevent division by zero
+	mask = np.where(res == 0)
+	res = np.delete(res, mask)
+	fec = np.delete(fec, mask)
+
 	#Compute equilibrium susceptible prevalence
 	def S_star(beta, mu=0.2):
 		return mu / beta
@@ -254,16 +274,6 @@ def PIP(model, interp=False, order=4, points=100):
 	#Calculate pairwise invasion fitness
 	def invasion_fitness(b_res, beta_res, b_mut, beta_mut, mu=0.2, k=0.001):
 		return b_mut - mu - k*(S_star(beta_res) + I_star(beta_res, b_res)) - beta_mut*I_star(beta_res, b_res)
-	
-	#Retrieve pareto genotypes and remove genotype with zero transmission
-	if not interp:
-		res, fec = model.pareto()
-
-		fec = fec[res > 0]
-		res = res[res > 0]
-
-	else:
-		res, fec, _ = model.poly_approx(order=order, points=points)
 
 	PIP = np.zeros((len(res), len(res)))
 
