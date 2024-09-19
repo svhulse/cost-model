@@ -6,20 +6,20 @@ The models themselves and the basic tools for them are contained in the `model.p
 
 `model.py` contains two class structures. For documentation on how to use these classes, please refer to the jupyter notebook files.
 
-* `PModel` is the primary model. With this class, you can define a discrete random loci model, add epistasis, and run evolutionary simulations on this model
+* `PModel` is the primary model. With this class, you can define a discrete random loci model, add epistasis, and run evolutionary simulations.
 * `ADModel` contains code for running an adaptive dynamics simulation with equivalent dynamics to the discrete random loci model.
 
 This file also contains the method `PIP`, which is used for generating the pairwise invasion plots.
 
 `gen_data.ipynb` runs a series of simulations for a given level of epistasis and generates summary statistics for each simulation. This includes the following:
 
-* `Polymorphism`: Whether or not the numerical simulation ended in a polymorphism with two or more genotypes having abundance greater than 1
-* `PIPMin: Pareto`: The minimum number of genotypes which can invade across all resident genotypes for the Pareto genotypes
-* `PIPMin: Polynomial`: The minimum number of genotypes which can invade across all resident genotypes for the cubic polynomial interpolation
-* `PIPMin: Linear`: The minimum number of genotypes which can invade across all resident genotypes for the piecewise linear interpolation
-* `Shannon Diversity`: The Shannon diversity of the numerical simulation at equilibrium
-* `Nucleotide Diversity`: The nucleotide diversity of the numerical simulation at equilibrium
-* `Slope`: The slope of the Pareto front given by the quadratic coefficient
+* `Polymorphism`: Whether or not the numerical simulation ended in a polymorphism with two or more genotypes having abundance greater than 1.
+* `PIPMin: Pareto`: The minimum number of genotypes which can invade across all resident genotypes for the Pareto genotypes.
+* `PIPMin: Polynomial`: The minimum number of genotypes which can invade across all resident genotypes for the cubic polynomial interpolation.
+* `PIPMin: Linear`: The minimum number of genotypes which can invade across all resident genotypes for the piecewise linear interpolation.
+* `Shannon Diversity`: The Shannon diversity of the numerical simulation at equilibrium.
+* `Nucleotide Diversity`: The nucleotide diversity of the numerical simulation at equilibrium.
+* `Slope`: The slope of the Pareto front given by the quadratic coefficient.
 
 The data for all simulations is then put into a pandas DataFrame and saved as a .csv file.
 
