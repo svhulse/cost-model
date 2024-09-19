@@ -2,8 +2,6 @@
 
 This repository contains the code used to generate the data referenced in our manuscript. The code used to make each figure is also included.
 
-## Code Organization
-
 The models themselves and the basic tools for them are contained in the `model.py` file. The code for running particular analyses and generating figures is contained across several jupyter notebooks. This repository can be used to generate all figures from the manuscript, except for figure 1, which was made in illustrator.
 
 `model.py` contains two class structures. For documentation on how to use these classes, please refer to the jupyter notebook files.
