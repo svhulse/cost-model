@@ -160,17 +160,6 @@ class PModel:
 		fec_interp = np.poly1d(coefs)(res_interp)
 
 		return res_interp, fec_interp, coefs
-	
-	'''
-	def spline_approx(self, points=1000):
-		res, fec = self.pareto()
-		cs = CubicSpline(res, fec)
-
-		res_interp = np.linspace(np.min(res), np.max(res), points)
-		fec_interp = cs(res_interp) 
-
-		return res_interp, fec_interp
-	'''
 		
 	#Return a polynomial approximation of the Pareto front
 	def linear_approx(self, points=1000):
@@ -258,6 +247,13 @@ class ADModel:
 		return (S_eq, I_eq)
 
 def PIP(res, fec):
+	'''
+	The PIP function takes in a vector of genotype resistance values and cost values
+	and outputs a raster of whether or not each possible resident-mutant combination
+	can invade. The output matrix consists of zeros and ones, where a one indicates
+	the mutant can invade. 
+	'''
+
 	#Remove genotypes with zero transmission to prevent division by zero
 	mask = np.where(res == 0)
 	res = np.delete(res, mask)
